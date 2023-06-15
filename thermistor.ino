@@ -1,37 +1,48 @@
-// Constants for thermistor calculations
-const int adcPin = PA2;              // ADC pin connected to thermistor
-const int referenceVoltage = 5.0;   // Reference voltage of ADC (in volts)
-const int adcResolution = 1023;     // ADC resolution (10-bit)
+#include <math.h>  // Needed for log() function
 
-// Thermistor resistance-temperature curve
-const float R25 = 330000;   // Resistance at 25°C (in ohms)
-const float T1 = 25;        // Reference temperature (in degrees Celsius)
-const float B25_85 = 4750;  // B constant (Beta value) from 25°C to 85°C (in K)
+// Constants for B-parameter equation
+const float T0 = 298.15;  // Reference temperature (25C in K)
+const float R0 = 10000;   // Resistance at reference temperature (10k ohms)
+const float B = 3453;     // B parameter
+
+// Function to read temperature from a thermistor connected to the specified analog input pin
+float readThermistor(int pin) {
+  int reading = analogRead(pin);  // Read the voltage across the thermistor
+
+  // Check for invalid ADC readings
+  if (reading <= 0 || reading >= 1023) {
+    Serial.println("Error: Invalid ADC reading");
+    return NAN;  // Return not-a-number on error
+  }
+
+  float voltage = reading * (5.0 / 1023.0);  // Convert ADC reading to voltage
+  float R = 10000 * ((5.0 / voltage) - 1);  // Calculate the thermistor resistance
+  float T = 1 / (1/T0 + 1/B * log(R/R0));   // Calculate the temperature using the B-parameter equation
+
+  T = T - 273.15;  // Convert from Kelvin to Celsius
+
+  // Check for unreasonable temperatures
+  if (T < -40 || T > 125) {
+    Serial.println("Error: Unreasonable temperature value");
+    return NAN;  // Return not-a-number on error
+  }
+
+  return T;  // Return the calculated temperature
+}
 
 void setup() {
-  Serial.begin(9600);   // Initialize Serial Monitor
+  Serial.begin(9600);  // Start the serial communication with the computer
 }
 
 void loop() {
-  // Read the ADC value
-  int adcValue = analogRead(adcPin);
+  float temperature = readThermistor(A0);  // Read the temperature from the thermistor
 
-  // Convert ADC value to voltage
-  float voltage = (adcValue * referenceVoltage) / adcResolution;
+  // Check for errors
+  if (isnan(temperature)) {
+    Serial.println("Error reading temperature");
+  } else {
+    Serial.println(temperature);  // Print the temperature to the serial monitor
+  }
 
-  // Convert voltage to thermistor resistance
-  float thermistorResistance = (voltage * R25) / (referenceVoltage - voltage);
-
-  // Convert thermistor resistance to temperature using the Steinhart-Hart equation
-  float invTemperature = log(thermistorResistance / R25);
-  invTemperature /= B25_85;
-  invTemperature += 1.0 / (T1 + 273.15);
-  float temperature = 1.0 / invTemperature - 273.15;  // Temperature in Celsius
-
-  // Print the temperature
-  Serial.print("Temperature: ");
-  Serial.print(temperature);
-  Serial.println(" °C");
-
-  delay(1000);   // Wait for 1 second before the next reading
+  delay(1000);  // Wait for 1 second before the next reading
 }
